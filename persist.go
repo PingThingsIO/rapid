@@ -114,6 +114,8 @@ func loadFailFile(filename string) (string, uint64, []uint64, error) {
 
 	var data []string
 	scanner := bufio.NewScanner(f)
+	buffer := make([]byte, bufio.MaxScanTokenSize, bufio.MaxScanTokenSize*16)
+	scanner.Buffer(buffer, 0)
 	for scanner.Scan() {
 		s := strings.TrimSpace(scanner.Text())
 		if strings.HasPrefix(s, "#") || s == "" {
