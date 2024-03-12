@@ -35,14 +35,18 @@ func checkString(t *T) {
 
 func checkStuckStateMachine(t *T) {
 	die := 0
-	t.Repeat(map[string]func(*T){
-		"roll": func(t *T) {
-			if die == 6 {
-				t.Skip("game over")
-			}
-			die = IntRange(1, 6).Draw(t, "die")
-		},
-	})
+	t.Repeat(
+		Just(StateMachineAction{
+			Name: "roll",
+			Func: func(t *T) {
+				if die == 6 {
+					t.Skip("game over")
+				}
+				die = IntRange(1, 6).Draw(t, "die")
+			},
+		}),
+		nil,
+	)
 }
 
 func TestRapidInt(t *testing.T) {

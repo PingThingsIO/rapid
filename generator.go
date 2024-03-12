@@ -48,7 +48,21 @@ func (g *Generator[V]) Draw(t *T, label string) V {
 
 	if len(t.refDraws) > 0 {
 		ref := t.refDraws[t.draws]
-		if !reflect.DeepEqual(v, ref) {
+		// FIXME: this is rather ugly
+		var passed bool
+		if refstr, ok := ref.(string); ok {
+			typ := reflect.TypeOf(v)
+			m, ok := typ.MethodByName("ActionName")
+			if ok {
+				name := m.Func.Call([]reflect.Value{reflect.ValueOf(v)})[0].String()
+				if name != refstr {
+					t.tb.Fatalf("draw %v differs: %#v vs expected %#v", t.draws, name, refstr)
+				} else {
+					passed = true
+				}
+			}
+		}
+		if !passed && !reflect.DeepEqual(v, ref) {
 			t.tb.Fatalf("draw %v differs: %#v vs expected %#v", t.draws, v, ref)
 		}
 	}

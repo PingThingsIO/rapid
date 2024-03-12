@@ -47,33 +47,42 @@ func testQueue(t *rapid.T) {
 	q := NewQueue(n)                          // queue being tested
 	var state []int                           // model of the queue
 
-	t.Repeat(map[string]func(*rapid.T){
-		"get": func(t *rapid.T) {
-			if q.Size() == 0 {
-				t.Skip("queue empty")
-			}
+	t.Repeat(
+		rapid.SampledFrom([]rapid.StateMachineAction{
+			{
+				Name: "get",
+				Func: func(t *rapid.T) {
+					if q.Size() == 0 {
+						t.Skip("queue empty")
+					}
 
-			i := q.Get()
-			if i != state[0] {
-				t.Fatalf("got invalid value: %v vs expected %v", i, state[0])
-			}
-			state = state[1:]
-		},
-		"put": func(t *rapid.T) {
-			if q.Size() == n {
-				t.Skip("queue full")
-			}
+					i := q.Get()
+					if i != state[0] {
+						t.Fatalf("got invalid value: %v vs expected %v", i, state[0])
+					}
+					state = state[1:]
+				},
+			},
+			{
+				Name: "put",
+				Func: func(t *rapid.T) {
+					if q.Size() == n {
+						t.Skip("queue full")
+					}
 
-			i := rapid.Int().Draw(t, "i")
-			q.Put(i)
-			state = append(state, i)
-		},
-		"": func(t *rapid.T) {
+					i := rapid.Int().Draw(t, "i")
+					q.Put(i)
+					state = append(state, i)
+				},
+			},
+		}),
+
+		func(t *rapid.T) {
 			if q.Size() != len(state) {
 				t.Fatalf("queue size mismatch: %v vs expected %v", q.Size(), len(state))
 			}
 		},
-	})
+	)
 }
 
 // Rename to TestQueue(t *testing.T) to make an actual (failing) test.

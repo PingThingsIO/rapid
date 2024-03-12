@@ -42,26 +42,37 @@ func TestStateMachine_Counter(t *testing.T) {
 	checkShrink(t, func(t *T) {
 		var c buggyCounter
 		var incs, decs int
-		t.Repeat(map[string]func(*T){
-			"Inc": func(_ *T) {
-				c.Inc()
-				incs++
-			},
-			"Dec": func(_ *T) {
-				c.Dec()
-				decs++
-			},
-			"Reset": func(_ *T) {
-				c.Reset()
-				incs = 0
-				decs = 0
-			},
-			"": func(t *T) {
+		t.Repeat(
+			SampledFrom([]StateMachineAction{
+				{
+					Name: "Inc",
+					Func: func(_ *T) {
+						c.Inc()
+						incs++
+					},
+				},
+				{
+					Name: "Dec",
+					Func: func(_ *T) {
+						c.Dec()
+						decs++
+					},
+				},
+				{
+					Name: "Reset",
+					Func: func(_ *T) {
+						c.Reset()
+						incs = 0
+						decs = 0
+					},
+				},
+			}),
+			func(t *T) {
 				if c.Get() != incs-decs {
 					t.Fatalf("counter value is %v with %v incs and %v decs", c.Get(), incs, decs)
 				}
 			},
-		})
+		)
 	},
 		"Inc", "Inc", "Inc", "Inc",
 		"Dec",
@@ -78,31 +89,42 @@ func TestStateMachine_Halting(t *testing.T) {
 
 	checkShrink(t, func(t *T) {
 		var a, b, c []int
-		t.Repeat(map[string]func(*T){
-			"A": func(t *T) {
-				if len(a) == 3 {
-					t.SkipNow()
-				}
-				a = append(a, Int().Draw(t, "a"))
-			},
-			"B": func(t *T) {
-				if len(b) == 3 {
-					t.SkipNow()
-				}
-				b = append(b, Int().Draw(t, "b"))
-			},
-			"C": func(t *T) {
-				if len(c) == 3 {
-					t.SkipNow()
-				}
-				c = append(c, Int().Draw(t, "c"))
-			},
-			"": func(t *T) {
+		t.Repeat(
+			SampledFrom([]StateMachineAction{
+				{
+					Name: "A",
+					Func: func(t *T) {
+						if len(a) == 3 {
+							t.SkipNow()
+						}
+						a = append(a, Int().Draw(t, "a"))
+					},
+				},
+				{
+					Name: "B",
+					Func: func(t *T) {
+						if len(b) == 3 {
+							t.SkipNow()
+						}
+						b = append(b, Int().Draw(t, "b"))
+					},
+				},
+				{
+					Name: "C",
+					Func: func(t *T) {
+						if len(c) == 3 {
+							t.SkipNow()
+						}
+						c = append(c, Int().Draw(t, "c"))
+					},
+				},
+			}),
+			func(t *T) {
 				if len(a) > 3 || len(b) > 3 || len(c) > 3 {
 					t.Fatalf("too many elements: %v, %v, %v", len(a), len(b), len(c))
 				}
 			},
-		})
+		)
 	}, a...)
 }
 
@@ -146,33 +168,41 @@ func queueTest(t *T) {
 	size := IntRange(1, 1000).Draw(t, "size")
 	q := newBuggyQueue(size)
 	var state []int
-	t.Repeat(map[string]func(*T){
-		"Get": func(t *T) {
-			if q.Size() == 0 {
-				t.Skip("queue empty")
-			}
+	t.Repeat(
+		SampledFrom([]StateMachineAction{
+			{
+				Name: "Get",
+				Func: func(t *T) {
+					if q.Size() == 0 {
+						t.Skip("queue empty")
+					}
 
-			n := q.Get()
-			if n != state[0] {
-				t.Fatalf("got invalid value: %v vs expected %v", n, state[0])
-			}
-			state = state[1:]
-		},
-		"Put": func(t *T) {
-			if q.Size() == size {
-				t.Skip("queue full")
-			}
+					n := q.Get()
+					if n != state[0] {
+						t.Fatalf("got invalid value: %v vs expected %v", n, state[0])
+					}
+					state = state[1:]
+				},
+			},
+			{
+				Name: "Put",
+				Func: func(t *T) {
+					if q.Size() == size {
+						t.Skip("queue full")
+					}
 
-			n := Int().Draw(t, "n")
-			q.Put(n)
-			state = append(state, n)
-		},
-		"": func(t *T) {
+					n := Int().Draw(t, "n")
+					q.Put(n)
+					state = append(state, n)
+				},
+			},
+		}),
+		func(t *T) {
 			if q.Size() != len(state) {
 				t.Fatalf("queue size mismatch: %v vs expected %v", q.Size(), len(state))
 			}
 		},
-	})
+	)
 }
 
 func TestStateMachine_Queue(t *testing.T) {
@@ -191,37 +221,54 @@ func TestStateMachine_DiscardGarbage(t *testing.T) {
 
 	checkShrink(t, func(t *T) {
 		var a, b []int
-		t.Repeat(map[string]func(*T){
-			"AddA": func(t *T) {
-				if len(b) < 3 {
-					t.Skip("too early")
-				}
-				n := Int().Draw(t, "a")
-				a = append(a, n)
-			},
-			"AddB": func(t *T) {
-				n := Int().Draw(t, "b")
-				b = append(b, n)
-			},
-			"Whatever1": func(t *T) {
-				b := Bool().Draw(t, "whatever 1/1")
-				if b {
-					t.Skip("arbitrary decision")
-				}
-				Float64().Draw(t, "whatever 1/2")
-			},
-			"Whatever2": func(t *T) {
-				SliceOfDistinct(Int(), ID[int]).Draw(t, "whatever 2")
-			},
-			"Whatever3": func(t *T) {
-				OneOf(SliceOf(Byte()), SliceOf(ByteMax(239))).Draw(t, "whatever 3")
-			},
-			"": func(t *T) {
+		t.Repeat(
+			SampledFrom([]StateMachineAction{
+				{
+					Name: "AddA",
+					Func: func(t *T) {
+						if len(b) < 3 {
+							t.Skip("too early")
+						}
+						n := Int().Draw(t, "a")
+						a = append(a, n)
+					},
+				},
+				{
+					Name: "AddB",
+					Func: func(t *T) {
+						n := Int().Draw(t, "b")
+						b = append(b, n)
+					},
+				},
+				{
+					Name: "Whatever1",
+					Func: func(t *T) {
+						b := Bool().Draw(t, "whatever 1/1")
+						if b {
+							t.Skip("arbitrary decision")
+						}
+						Float64().Draw(t, "whatever 1/2")
+					},
+				},
+				{
+					Name: "Whatever2",
+					Func: func(t *T) {
+						SliceOfDistinct(Int(), ID[int]).Draw(t, "whatever 2")
+					},
+				},
+				{
+					Name: "Whatever3",
+					Func: func(t *T) {
+						OneOf(SliceOf(Byte()), SliceOf(ByteMax(239))).Draw(t, "whatever 3")
+					},
+				},
+			}),
+			func(t *T) {
 				if len(a) > len(b) {
 					t.Fatalf("`a` has outgrown `b`: %v vs %v", len(a), len(b))
 				}
 			},
-		})
+		)
 	},
 		"AddB", 0,
 		"AddB", 0,

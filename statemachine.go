@@ -7,41 +7,27 @@
 package rapid
 
 import (
+	"fmt"
 	"reflect"
-	"sort"
 	"testing"
 )
 
 const (
 	actionLabel       = "action"
 	validActionTries  = 100 // hack, but probably good enough for now
-	checkMethodName   = "Check"
 	noValidActionsMsg = "can't find a valid (non-skipped) action"
 )
 
 // Repeat executes a random sequence of actions (often called a "state machine" test).
-// actions[""], if set, is executed before/after every other action invocation
-// and should only contain invariant checking code.
+//
+// Check, if set, is ran initially once and after every action. It should contain
+// invariant checks.
 //
 // For complex state machines, it can be more convenient to specify actions as
 // methods of a special state machine type. In this case, [StateMachineActions]
-// can be used to create an actions map from state machine methods using reflection.
-func (t *T) Repeat(actions map[string]func(*T)) {
+// can be used to create an actions generator from state machine methods using reflection.
+func (t *T) Repeat(actions *Generator[StateMachineAction], check func(*T)) {
 	t.Helper()
-
-	check := func(*T) {}
-	actionKeys := make([]string, 0, len(actions))
-	for key, action := range actions {
-		if key != "" {
-			actionKeys = append(actionKeys, key)
-		} else {
-			check = action
-		}
-	}
-	if len(actionKeys) == 0 {
-		return
-	}
-	sort.Strings(actionKeys)
 
 	steps := flags.steps
 	if testing.Short() {
@@ -50,17 +36,19 @@ func (t *T) Repeat(actions map[string]func(*T)) {
 
 	repeat := newRepeat(-1, -1, float64(steps), "Repeat")
 	sm := stateMachine{
-		check:      check,
-		actionKeys: SampledFrom(actionKeys),
-		actions:    actions,
+		actions: actions,
 	}
 
-	sm.check(t)
+	if check != nil {
+		check(t)
+	}
 	t.failOnError()
 	for repeat.more(t.s) {
 		ok := sm.executeAction(t)
 		if ok {
-			sm.check(t)
+			if check != nil {
+				check(t)
+			}
 			t.failOnError()
 		} else {
 			repeat.reject()
@@ -68,42 +56,51 @@ func (t *T) Repeat(actions map[string]func(*T)) {
 	}
 }
 
-type StateMachine interface {
-	// Check is ran after every action and should contain invariant checks.
-	//
-	// All other public methods should have a form ActionName(t *rapid.T)
-	// and are used as possible actions. At least one action has to be specified.
-	Check(*T)
+type smActionName interface {
+	ActionName() string
 }
 
-// StateMachineActions creates an actions map for [*T.Repeat]
-// from methods of a [StateMachine] type instance using reflection.
-func StateMachineActions(sm StateMachine) map[string]func(*T) {
+type StateMachineAction struct {
+	Name string
+	Func func(*T)
+}
+
+func (sa StateMachineAction) ActionName() string {
+	return sa.Name
+}
+
+func (sa StateMachineAction) String() string {
+	return fmt.Sprintf("%q", sa.Name)
+}
+
+// StateMachineActions creates an actions generator for [*T.Repeat]
+// from methods of sm using reflection.
+func StateMachineActions(sm interface{}) *Generator[StateMachineAction] {
 	var (
 		v = reflect.ValueOf(sm)
 		t = v.Type()
 		n = t.NumMethod()
 	)
 
-	actions := make(map[string]func(*T), n)
+	var actions []StateMachineAction
 	for i := 0; i < n; i++ {
 		name := t.Method(i).Name
 		m, ok := v.Method(i).Interface().(func(*T))
-		if ok && name != checkMethodName {
-			actions[name] = m
+		if ok {
+			actions = append(actions, StateMachineAction{
+				Name: name,
+				Func: m,
+			})
 		}
 	}
 
 	assertf(len(actions) > 0, "state machine of type %v has no actions specified", t)
-	actions[""] = sm.Check
 
-	return actions
+	return SampledFrom(actions)
 }
 
 type stateMachine struct {
-	check      func(*T)
-	actionKeys *Generator[string]
-	actions    map[string]func(*T)
+	actions *Generator[StateMachineAction]
 }
 
 func (sm *stateMachine) executeAction(t *T) bool {
@@ -111,7 +108,7 @@ func (sm *stateMachine) executeAction(t *T) bool {
 
 	for n := 0; n < validActionTries; n++ {
 		i := t.s.beginGroup(actionLabel, false)
-		action := sm.actions[sm.actionKeys.Draw(t, "action")]
+		action := sm.actions.Draw(t, "action")
 		invalid, skipped := runAction(t, action)
 		t.s.endGroup(i, false)
 
@@ -125,7 +122,7 @@ func (sm *stateMachine) executeAction(t *T) bool {
 	panic(stopTest(noValidActionsMsg))
 }
 
-func runAction(t *T, action func(*T)) (invalid bool, skipped bool) {
+func runAction(t *T, action StateMachineAction) (invalid bool, skipped bool) {
 	defer func(draws int) {
 		if r := recover(); r != nil {
 			if _, ok := r.(invalidData); ok {
@@ -137,7 +134,7 @@ func runAction(t *T, action func(*T)) (invalid bool, skipped bool) {
 		}
 	}(t.draws)
 
-	action(t)
+	action.Func(t)
 	t.failOnError()
 
 	return false, false
