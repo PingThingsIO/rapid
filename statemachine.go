@@ -69,7 +69,7 @@ func (sa StateMachineAction) ActionName() string {
 	return sa.Name
 }
 
-func (sa StateMachineAction) String() string {
+func (sa StateMachineAction) GoString() string {
 	return fmt.Sprintf("%q", sa.Name)
 }
 
