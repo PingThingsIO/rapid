@@ -279,7 +279,7 @@ func doCheck(tb tb, deadline time.Time, checks int, seed uint64, failfile string
 func checkFailFile(tb tb, failfile string, prop func(*T)) ([]uint64, *testError, *testError) {
 	tb.Helper()
 
-	version, _, buf, err := loadFailFile(failfile)
+	version, seed, buf, err := loadFailFile(failfile)
 	if err != nil {
 		tb.Logf("[rapid] ignoring fail file: %v", err)
 		return nil, nil, nil
@@ -289,12 +289,18 @@ func checkFailFile(tb tb, failfile string, prop func(*T)) ([]uint64, *testError,
 		return nil, nil, nil
 	}
 
-	s1 := newBufBitStream(buf, false)
+	s1 := newRandomBitStream(0, false)
+	s1.init(seed)
 	t1 := newT(tb, s1, flags.verbose, nil)
 	err1 := checkOnce(t1, prop)
 	if err1 == nil {
-		tb.Logf("[rapid] fail file %q produced no errors", failfile)
-		return nil, nil, nil
+		s1 := newBufBitStream(buf, false)
+		t1 := newT(tb, s1, flags.verbose, nil)
+		err1 = checkOnce(t1, prop)
+		if err1 == nil {
+			tb.Logf("[rapid] fail file %q produced no errors", failfile)
+			return nil, nil, nil
+		}
 	}
 	if err1.isInvalidData() {
 		tb.Logf("[rapid] fail file %q is no longer valid", failfile)
