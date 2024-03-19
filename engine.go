@@ -293,6 +293,7 @@ func checkFailFile(tb tb, failfile string, prop func(*T)) ([]uint64, *testError,
 	t1 := newT(tb, s1, flags.verbose, nil)
 	err1 := checkOnce(t1, prop)
 	if err1 == nil {
+		tb.Logf("[rapid] fail file %q produced no errors", failfile)
 		return nil, nil, nil
 	}
 	if err1.isInvalidData() {
