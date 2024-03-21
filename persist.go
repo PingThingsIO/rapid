@@ -64,7 +64,7 @@ func failFilePattern(testName string) string {
 	return filepath.Join(dirName, fileName)
 }
 
-func saveFailFile(filename string, version string, output []byte, seed uint64, buf []uint64) error {
+func saveFailFile(filename string, version string, seed uint64, buf []uint64) error {
 	dir := filepath.Dir(filename)
 	err := os.MkdirAll(dir, persistDirMode)
 	if err != nil {
@@ -77,14 +77,6 @@ func saveFailFile(filename string, version string, output []byte, seed uint64, b
 	}
 	defer func() { _ = os.Remove(f.Name()) }()
 	defer func() { _ = f.Close() }()
-
-	out := strings.Split(string(output), "\n")
-	for _, s := range out {
-		_, err := f.WriteString("# " + s + "\n")
-		if err != nil {
-			return fmt.Errorf("failed to write data to fail file %q: %w", filename, err)
-		}
-	}
 
 	bs := []string{fmt.Sprintf("%v#%v", version, seed)}
 	for _, u := range buf {

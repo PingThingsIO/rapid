@@ -7,10 +7,10 @@
 package rapid
 
 import (
-	"bytes"
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -200,8 +200,8 @@ func checkTB(tb tb, deadline time.Time, prop func(*T)) {
 	} else {
 		if failfile == "" && !flags.nofailfile {
 			_, failfile = failFileName(tb.Name())
-			out := captureTestOutput(tb, prop, buf)
-			err := saveFailFile(failfile, rapidVersion, out, seed, buf)
+			captureTestOutput(io.Discard, tb, prop, buf)
+			err := saveFailFile(failfile, rapidVersion, seed, buf)
 			if err != nil {
 				tb.Logf("[rapid] %v", err)
 				failfile = ""
@@ -378,11 +378,9 @@ func checkOnce(t *T, prop func(*T)) (err *testError) {
 	return nil
 }
 
-func captureTestOutput(tb tb, prop func(*T), buf []uint64) []byte {
-	var b bytes.Buffer
-	l := log.New(&b, fmt.Sprintf("[%v] ", tb.Name()), log.Lmsgprefix|log.Ldate|log.Ltime|log.Lmicroseconds)
+func captureTestOutput(b io.Writer, tb tb, prop func(*T), buf []uint64) {
+	l := log.New(b, fmt.Sprintf("[%v] ", tb.Name()), log.Lmsgprefix|log.Ldate|log.Ltime|log.Lmicroseconds)
 	_ = checkOnce(newT(tb, newBufBitStream(buf, false), false, l), prop)
-	return b.Bytes()
 }
 
 type invalidData string
